@@ -6,13 +6,17 @@
 <title>Georgia &amp; Armenia – August 2026</title>
 <meta name="description" content="Digital photobook">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://josephoconnorlincoln.github.io/georgia-armenia-flipbook/">
 <meta property="og:title" content="Georgia &amp; Armenia – August 2026">
 <meta property="og:description" content="Digital photobook">
-<meta property="og:image" content="og.jpg">
+<meta property="og:image" content="https://josephoconnorlincoln.github.io/georgia-armenia-flipbook/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="894">
+<meta property="og:image:type" content="image/jpeg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Georgia &amp; Armenia – August 2026">
 <meta name="twitter:description" content="Digital photobook">
-<meta name="twitter:image" content="og.jpg">
+<meta name="twitter:image" content="https://josephoconnorlincoln.github.io/georgia-armenia-flipbook/og.jpg">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23111'/></svg>">
 
 <!-- ============================================================
@@ -89,7 +93,8 @@ const CONFIG = {
   }
   .btn:hover { color: #fff; border-color: #555; }
   #topbar { top: 14px; right: 14px; display: flex; gap: 8px; align-items: flex-start; }
-  #counter { bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; color: #777; letter-spacing: .1em; }
+  #hint { bottom: 14px; left: 0; right: 0; text-align: center; font-size: 11px; color: #5c5c5c; letter-spacing: .06em; }
+  #counter { bottom: 34px; left: 0; right: 0; text-align: center; font-size: 12px; color: #777; letter-spacing: .1em; }
   #menuWrap { position: relative; }
   #menu {
     display: none; position: absolute; top: 36px; right: 0; min-width: 150px;
@@ -107,7 +112,7 @@ const CONFIG = {
 <body>
 
 <div id="loader">
-  <div class="pct" id="pct">0%</div>
+  <div class="pct" id="pct">0 / 244</div>
   <div class="bar"><span id="barFill"></span></div>
   <div class="rotate" id="rotate">On phones and tablets: for best viewing, rotate to landscape and refresh the page</div>
 </div>
@@ -122,6 +127,7 @@ const CONFIG = {
   <button class="btn" id="fsBtn">⛶</button>
 </div>
 <div class="ui" id="counter"><span id="counterText"></span></div>
+<div class="ui" id="hint">Drag a page corner, or use the ← → keys</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/3/turn.min.js"></script>
@@ -131,6 +137,7 @@ const CONFIG = {
   const RATIO = CONFIG.pageWidth / CONFIG.pageHeight;   // single page, width / height
   const $book = $('#flipbook');
   let ready = false;
+  let hideTimer;
 
   /* ---------- portrait hint ---------- */
   function portraitCheck() {
@@ -168,17 +175,40 @@ const CONFIG = {
 
   /* ---------- preload everything, then open ---------- */
   let loaded = 0;
-  function tick() {
+  let lastProgress = Date.now();
+  const pending = new Set();
+  const retries = {};
+
+  function tick(img) {
+    if (img && !pending.has(img)) return;      // already counted
+    if (img) pending.delete(img);
     loaded++;
-    const pct = Math.round(loaded / TOTAL * 100);
-    document.getElementById('pct').textContent = pct + '%';
-    document.getElementById('barFill').style.width = pct + '%';
-    if (loaded >= TOTAL) start();
+    lastProgress = Date.now();
+    document.getElementById('pct').textContent = loaded + ' / ' + TOTAL;
+    document.getElementById('barFill').style.width = Math.round(loaded / TOTAL * 100) + '%';
+    if (loaded >= TOTAL) setTimeout(start, 0);
   }
+
   $book.find('img').each(function () {
-    if (this.complete) { tick(); }
-    else { this.addEventListener('load', tick, { once: true }); this.addEventListener('error', tick, { once: true }); }
+    const img = this;
+    if (img.complete && img.naturalWidth > 0) { pending.add(img); tick(img); return; }
+    pending.add(img);
+    img.addEventListener('load', function () { tick(img); }, { once: true });
+    img.addEventListener('error', function () { tick(img); }, { once: true });
   });
+
+  // if a request stalls, quietly ask for it again rather than hanging for ever
+  const watchdog = setInterval(function () {
+    if (ready) { clearInterval(watchdog); return; }
+    if (Date.now() - lastProgress < 10000) return;
+    lastProgress = Date.now();
+    pending.forEach(function (img) {
+      const src = img.getAttribute('src').split('?')[0];
+      retries[src] = (retries[src] || 0) + 1;
+      if (retries[src] > 3) return;
+      img.src = src + '?r=' + retries[src];
+    });
+  }, 2000);
 
   function startPage() {
     const m = location.hash.match(/p=(\d+)/);
@@ -190,11 +220,11 @@ const CONFIG = {
   function start() {
     if (ready) return;
     ready = true;
+    const first = startPage();          // read before turn.js rewrites the hash
     const d = dims();
     $book.turn({
       width: d.w,
       height: d.h,
-      page: startPage(),
       autoCenter: true,
       acceleration: true,
       gradients: true,
@@ -207,11 +237,19 @@ const CONFIG = {
         }
       }
     });
+    if (first > 1) setTimeout(function () { $book.turn('page', first); }, 50);
     $book.addClass('ready');
     document.getElementById('loader').classList.add('gone');
     updateCounter($book.turn('page'));
     showUI();
   }
+
+  window.addEventListener('hashchange', function () {
+    if (!ready) return;
+    const n = startPage();
+    const view = $book.turn('view').filter(Boolean);
+    if (view.indexOf(n) === -1) $book.turn('page', n);
+  });
 
   /* ---------- counter ---------- */
   function updateCounter(page) {
@@ -264,7 +302,6 @@ const CONFIG = {
   }, { passive: true });
 
   /* ---------- auto-hiding controls and cursor ---------- */
-  let hideTimer;
   function showUI() {
     document.body.classList.add('show-cursor');
     document.querySelectorAll('.ui').forEach(function (el) { el.classList.add('visible'); });
