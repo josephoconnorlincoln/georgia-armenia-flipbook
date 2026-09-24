@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Georgia &amp; Armenia – August 2026</title>
+<meta name="description" content="Digital photobook">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Georgia &amp; Armenia – August 2026">
+<meta property="og:description" content="Digital photobook">
+<meta property="og:image" content="og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Georgia &amp; Armenia – August 2026">
+<meta name="twitter:description" content="Digital photobook">
+<meta name="twitter:image" content="og.jpg">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23111'/></svg>">
+
+<!-- ============================================================
+     CONFIG — edit these if anything changes
+     ============================================================ -->
+<script>
+const CONFIG = {
+  totalPages: 244,          // number of page images
+  pageWidth: 23.26,         // page width  (any unit, ratio is what matters)
+  pageHeight: 17.32,        // page height
+  margin: 10,               // px of space around the book
+  // page 1 is "page.jpg", the rest are "page2.jpg" ... "page244.jpg"
+  filename: function (n) { return n === 1 ? 'page.jpg' : 'page' + n + '.jpg'; },
+  // contents menu: label and the page it jumps to
+  jumps: [
+    ['Cover', 1],
+    ['Map', 2],
+    ['Contents', 3],
+    ['Day 1', 4],
+    ['Day 2', 30],
+    ['Day 3', 48],
+    ['Day 4', 68],
+    ['Day 5', 100],
+    ['Day 6', 138],
+    ['Day 7', 154],
+    ['Day 8', 184],
+    ['Day 9', 212]
+  ]
+};
+</script>
+
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #111; color: #ddd;
+    font-family: Georgia, 'Times New Roman', serif;
+    cursor: none;
+  }
+  body.show-cursor { cursor: default; }
+
+  /* ---------- loader ---------- */
+  #loader {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #111; transition: opacity .6s ease;
+  }
+  #loader.gone { opacity: 0; pointer-events: none; }
+  #loader .pct { font-size: 15px; letter-spacing: .18em; color: #888; }
+  #loader .bar { width: 200px; height: 1px; background: #2a2a2a; margin-top: 18px; }
+  #loader .bar span { display: block; height: 100%; width: 0; background: #888; transition: width .25s ease; }
+  #loader .rotate {
+    display: none; margin-top: 26px; max-width: 280px; text-align: center;
+    font-size: 13px; line-height: 1.5; color: #666;
+  }
+
+  /* ---------- book ---------- */
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #flipbook { visibility: hidden; }
+  #flipbook.ready { visibility: visible; }
+  #flipbook .page { background: #111; }
+  #flipbook .page img { width: 100%; height: 100%; display: block; }
+
+  /* ---------- controls ---------- */
+  .ui {
+    position: fixed; z-index: 60; opacity: 0; transition: opacity .35s ease;
+    font-family: Georgia, serif;
+  }
+  .ui.visible { opacity: 1; }
+  .btn {
+    background: rgba(20,20,20,.82); color: #ccc; border: 1px solid #333;
+    padding: 7px 13px; font-size: 13px; letter-spacing: .04em; cursor: pointer;
+    font-family: inherit; border-radius: 2px;
+  }
+  .btn:hover { color: #fff; border-color: #555; }
+  #topbar { top: 14px; right: 14px; display: flex; gap: 8px; align-items: flex-start; }
+  #counter { bottom: 14px; left: 0; right: 0; text-align: center; font-size: 12px; color: #777; letter-spacing: .1em; }
+  #menuWrap { position: relative; }
+  #menu {
+    display: none; position: absolute; top: 36px; right: 0; min-width: 150px;
+    background: rgba(20,20,20,.95); border: 1px solid #333; border-radius: 2px; padding: 4px 0;
+  }
+  #menu.open { display: block; }
+  #menu button {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    color: #bbb; padding: 7px 16px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  #menu button:hover { background: #262626; color: #fff; }
+  @media (max-width: 700px) { .ui { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="pct" id="pct">0%</div>
+  <div class="bar"><span id="barFill"></span></div>
+  <div class="rotate" id="rotate">On phones and tablets: for best viewing, rotate to landscape and refresh the page</div>
+</div>
+
+<div id="stage"><div id="flipbook"></div></div>
+
+<div class="ui" id="topbar">
+  <div id="menuWrap">
+    <button class="btn" id="menuBtn">Contents</button>
+    <div id="menu"></div>
+  </div>
+  <button class="btn" id="fsBtn">⛶</button>
+</div>
+<div class="ui" id="counter"><span id="counterText"></span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/turn.js/3/turn.min.js"></script>
+<script>
+(function () {
+  const TOTAL = CONFIG.totalPages;
+  const RATIO = CONFIG.pageWidth / CONFIG.pageHeight;   // single page, width / height
+  const $book = $('#flipbook');
+  let ready = false;
+
+  /* ---------- portrait hint ---------- */
+  function portraitCheck() {
+    const small = Math.min(window.innerWidth, window.innerHeight) < 820;
+    const portrait = window.innerHeight > window.innerWidth;
+    document.getElementById('rotate').style.display = (small && portrait) ? 'block' : 'none';
+  }
+  portraitCheck();
+  window.addEventListener('resize', portraitCheck);
+
+  /* ---------- size the book to the window ---------- */
+  function dims() {
+    const m = CONFIG.margin;
+    const maxW = window.innerWidth - m * 2;
+    const maxH = window.innerHeight - m * 2;
+    let h = maxH;
+    let w = h * RATIO * 2;             // two pages side by side
+    if (w > maxW) { w = maxW; h = w / (RATIO * 2); }
+    return { w: Math.round(w), h: Math.round(h) };
+  }
+
+  /* ---------- build the pages ---------- */
+  const frag = document.createDocumentFragment();
+  for (let i = 1; i <= TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'page';
+    const img = document.createElement('img');
+    img.src = CONFIG.filename(i);
+    img.alt = 'Page ' + i;
+    img.decoding = 'async';
+    d.appendChild(img);
+    frag.appendChild(d);
+  }
+  $book[0].appendChild(frag);
+
+  /* ---------- preload everything, then open ---------- */
+  let loaded = 0;
+  function tick() {
+    loaded++;
+    const pct = Math.round(loaded / TOTAL * 100);
+    document.getElementById('pct').textContent = pct + '%';
+    document.getElementById('barFill').style.width = pct + '%';
+    if (loaded >= TOTAL) start();
+  }
+  $book.find('img').each(function () {
+    if (this.complete) { tick(); }
+    else { this.addEventListener('load', tick, { once: true }); this.addEventListener('error', tick, { once: true }); }
+  });
+
+  function startPage() {
+    const m = location.hash.match(/p=(\d+)/);
+    if (!m) return 1;
+    const n = parseInt(m[1], 10);
+    return (n >= 1 && n <= TOTAL) ? n : 1;
+  }
+
+  function start() {
+    if (ready) return;
+    ready = true;
+    const d = dims();
+    $book.turn({
+      width: d.w,
+      height: d.h,
+      page: startPage(),
+      autoCenter: true,
+      acceleration: true,
+      gradients: true,
+      elevation: 50,
+      duration: 1200,
+      when: {
+        turned: function (e, page) {
+          updateCounter(page);
+          history.replaceState(null, '', '#p=' + page);
+        }
+      }
+    });
+    $book.addClass('ready');
+    document.getElementById('loader').classList.add('gone');
+    updateCounter($book.turn('page'));
+    showUI();
+  }
+
+  /* ---------- counter ---------- */
+  function updateCounter(page) {
+    const view = $book.turn('view', page).filter(Boolean);
+    const label = view.length > 1 ? view[0] + '–' + view[1] : String(view[0]);
+    document.getElementById('counterText').textContent = label + ' / ' + TOTAL;
+  }
+
+  /* ---------- contents menu ---------- */
+  const menu = document.getElementById('menu');
+  CONFIG.jumps.forEach(function (j) {
+    const b = document.createElement('button');
+    b.textContent = j[0];
+    b.addEventListener('click', function () {
+      menu.classList.remove('open');
+      if (ready) $book.turn('page', j[1]);
+    });
+    menu.appendChild(b);
+  });
+  document.getElementById('menuBtn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', function () { menu.classList.remove('open'); });
+
+  /* ---------- fullscreen ---------- */
+  document.getElementById('fsBtn').addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  });
+
+  /* ---------- keyboard ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (!ready) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') $book.turn('next');
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') $book.turn('previous');
+    if (e.key === 'Home') $book.turn('page', 1);
+    if (e.key === 'End') $book.turn('page', TOTAL);
+  });
+
+  /* ---------- swipe ---------- */
+  let x0 = null;
+  document.addEventListener('touchstart', function (e) { x0 = e.changedTouches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (x0 === null || !ready) return;
+    const dx = x0 - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 50) $book.turn(dx > 0 ? 'next' : 'previous');
+    x0 = null;
+  }, { passive: true });
+
+  /* ---------- auto-hiding controls and cursor ---------- */
+  let hideTimer;
+  function showUI() {
+    document.body.classList.add('show-cursor');
+    document.querySelectorAll('.ui').forEach(function (el) { el.classList.add('visible'); });
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function () {
+      if (menu.classList.contains('open')) return;
+      document.body.classList.remove('show-cursor');
+      document.querySelectorAll('.ui').forEach(function (el) { el.classList.remove('visible'); });
+    }, 3000);
+  }
+  document.addEventListener('mousemove', showUI);
+  document.addEventListener('touchstart', showUI, { passive: true });
+
+  /* ---------- resize ---------- */
+  let rt;
+  window.addEventListener('resize', function () {
+    if (!ready) return;
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      const d = dims();
+      $book.turn('size', d.w, d.h);
+    }, 120);
+  });
+})();
+</script>
+</body>
+</html>
