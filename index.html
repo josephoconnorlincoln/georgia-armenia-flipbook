@@ -68,10 +68,6 @@ const CONFIG = {
   #loader .pct { font-size: 15px; letter-spacing: .18em; color: #888; }
   #loader .bar { width: 200px; height: 1px; background: #2a2a2a; margin-top: 18px; }
   #loader .bar span { display: block; height: 100%; width: 0; background: #888; transition: width .25s ease; }
-  #loader .rotate {
-    display: none; margin-top: 26px; max-width: 280px; text-align: center;
-    font-size: 13px; line-height: 1.5; color: #666;
-  }
 
   /* ---------- book ---------- */
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
@@ -106,7 +102,11 @@ const CONFIG = {
     color: #bbb; padding: 7px 16px; font-size: 13px; cursor: pointer; font-family: inherit;
   }
   #menu button:hover { background: #262626; color: #fff; }
-  @media (max-width: 700px) { .ui { opacity: 1; } }
+  @media (max-width: 900px), (pointer: coarse) {
+    .ui { opacity: 1; }
+    #hint { display: none; }
+    #counter { bottom: 14px; font-size: 11px; }
+  }
 </style>
 </head>
 <body>
@@ -114,7 +114,6 @@ const CONFIG = {
 <div id="loader">
   <div class="pct" id="pct">0 / 244</div>
   <div class="bar"><span id="barFill"></span></div>
-  <div class="rotate" id="rotate">On phones and tablets: for best viewing, rotate to landscape and refresh the page</div>
 </div>
 
 <div id="stage"><div id="flipbook"></div></div>
@@ -139,24 +138,20 @@ const CONFIG = {
   let ready = false;
   let hideTimer;
 
-  /* ---------- portrait hint ---------- */
-  function portraitCheck() {
-    const small = Math.min(window.innerWidth, window.innerHeight) < 820;
-    const portrait = window.innerHeight > window.innerWidth;
-    document.getElementById('rotate').style.display = (small && portrait) ? 'block' : 'none';
-  }
-  portraitCheck();
-  window.addEventListener('resize', portraitCheck);
-
   /* ---------- size the book to the window ---------- */
+  function isSmall() {
+    return window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
+  }
+
   function dims() {
     const m = CONFIG.margin;
+    const bottomRoom = 0;
     const maxW = window.innerWidth - m * 2;
-    const maxH = window.innerHeight - m * 2;
+    const maxH = window.innerHeight - m * 2 - bottomRoom;
     let h = maxH;
     let w = h * RATIO * 2;             // two pages side by side
     if (w > maxW) { w = maxW; h = w / (RATIO * 2); }
-    return { w: Math.round(w), h: Math.round(h) };
+    return { w: Math.round(w), h: Math.round(h), top: -Math.round(bottomRoom / 2) };
   }
 
   /* ---------- build the pages ---------- */
@@ -322,7 +317,7 @@ const CONFIG = {
     clearTimeout(rt);
     rt = setTimeout(function () {
       const d = dims();
-      $book.turn('size', d.w, d.h);
+        $book.turn('size', d.w, d.h);
     }, 120);
   });
 })();
